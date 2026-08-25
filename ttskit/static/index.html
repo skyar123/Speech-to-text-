@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ttskit playground</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fbfaf9; --fg: #1a1a19; --muted: #6b6a67; --line: #e2e0dc;
+    --card: #ffffff; --accent: #b5502a; --accent-fg: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#151513; --fg:#ecebe8; --muted:#9b9992; --line:#2e2e2b;
+            --card:#1e1e1c; --accent:#d97757; --accent-fg:#1a1a19; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  p.sub { color: var(--muted); margin: 0 0 28px; font-size: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line);
+          border-radius: 12px; padding: 20px; }
+  textarea { width:100%; min-height:170px; resize:vertical; padding:12px;
+             border:1px solid var(--line); border-radius:8px; background:var(--bg);
+             color:var(--fg); font:inherit; }
+  .row { display:flex; flex-wrap:wrap; gap:12px; margin-top:14px; }
+  .field { display:flex; flex-direction:column; gap:5px; flex:1 1 150px; min-width:0; }
+  label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+  select, input { padding:8px 10px; border:1px solid var(--line); border-radius:8px;
+                  background:var(--bg); color:var(--fg); font:inherit; min-width:0; }
+  button { margin-top:18px; padding:10px 18px; border:0; border-radius:8px;
+           background:var(--accent); color:var(--accent-fg); font:inherit; font-weight:600;
+           cursor:pointer; }
+  button:disabled { opacity:.55; cursor:progress; }
+  audio { width:100%; margin-top:18px; }
+  .status { margin-top:12px; font-size:13px; color:var(--muted); min-height:19px; }
+  .status.err { color:#c0392b; }
+  code { background:var(--card); border:1px solid var(--line); border-radius:5px;
+         padding:1px 5px; font-size:13px; }
+  footer { margin-top:26px; color:var(--muted); font-size:13px; line-height:1.7; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ttskit playground</h1>
+  <p class="sub">Free neural text-to-speech, served locally on the OpenAI API shape.</p>
+
+  <div class="card">
+    <textarea id="text" placeholder="Paste anything here…">Everything I generate can now be read aloud, for free, from my own machine.</textarea>
+
+    <div class="row">
+      <div class="field">
+        <label for="engine">Engine</label>
+        <select id="engine">
+          <option value="">default</option>
+          <option value="edge">edge (online)</option>
+          <option value="kokoro">kokoro (offline)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="voice">Voice</label>
+        <select id="voice"></select>
+      </div>
+      <div class="field">
+        <label for="format">Format</label>
+        <select id="format">
+          <option>mp3</option><option>wav</option><option>opus</option>
+          <option>aac</option><option>flac</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="speed">Speed <span id="speedLabel">1.00×</span></label>
+        <input id="speed" type="range" min="0.5" max="2" step="0.05" value="1" />
+      </div>
+    </div>
+
+    <button id="go">Speak</button>
+    <div class="status" id="status"></div>
+    <audio id="player" controls hidden></audio>
+  </div>
+
+  <footer>
+    Point any OpenAI client at <code>http://<span id="host">localhost:5050</span>/v1</code>
+    with any API key.<br />
+    <code>curl -s localhost:5050/v1/audio/speech -H 'Content-Type: application/json'
+    -d '{"input":"hi","voice":"nova"}' --output hi.mp3</code>
+  </footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const OPENAI_VOICES = ["alloy","ash","ballad","coral","echo","fable","nova","onyx","sage","shimmer","verse"];
+let objectUrl = null;
+
+$("host").textContent = location.host || "localhost:5050";
+$("speed").addEventListener("input", () => { $("speedLabel").textContent = (+$("speed").value).toFixed(2) + "×"; });
+
+function setVoices(names) {
+  const select = $("voice");
+  select.innerHTML = "";
+  for (const name of names) {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    select.appendChild(option);
+  }
+  select.value = names.includes("nova") ? "nova" : names[0];
+}
+setVoices(OPENAI_VOICES);
+
+async function loadVoices() {
+  const engine = $("engine").value;
+  try {
+    const res = await fetch("/v1/voices" + (engine ? "?engine=" + engine : ""));
+    if (!res.ok) return;
+    const data = await res.json();
+    const english = data.voices.filter((v) => (v.locale || "").startsWith("en")).map((v) => v.name);
+    setVoices([...OPENAI_VOICES, ...english]);
+  } catch (_) { /* keep the OpenAI aliases; they always resolve */ }
+}
+$("engine").addEventListener("change", loadVoices);
+loadVoices();
+
+$("go").addEventListener("click", async () => {
+  const text = $("text").value.trim();
+  if (!text) { $("status").textContent = "Type something first."; return; }
+
+  const button = $("go");
+  button.disabled = true;
+  $("status").className = "status";
+  $("status").textContent = "Synthesizing…";
+  const started = performance.now();
+
+  try {
+    const body = {
+      model: "tts-1",
+      input: text,
+      voice: $("voice").value,
+      response_format: $("format").value,
+      speed: parseFloat($("speed").value),
+    };
+    if ($("engine").value) body.engine = $("engine").value;
+
+    const res = await fetch("/v1/audio/speech", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}));
+      throw new Error(detail?.error?.message || res.status + " " + res.statusText);
+    }
+    const blob = await res.blob();
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrl = URL.createObjectURL(blob);
+    const player = $("player");
+    player.src = objectUrl;
+    player.hidden = false;
+    player.play().catch(() => {});
+    const seconds = ((performance.now() - started) / 1000).toFixed(1);
+    $("status").textContent = `${(blob.size / 1024).toFixed(0)} KB in ${seconds}s · ${res.headers.get("X-TTSKit-Voice") || body.voice}`;
+  } catch (err) {
+    $("status").className = "status err";
+    $("status").textContent = String(err.message || err);
+  } finally {
+    button.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

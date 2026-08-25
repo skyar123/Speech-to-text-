@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local config & secrets
+.env
+
+# Generated audio / model weights
+out/
+output/
+*.mp3
+*.m4b
+*.wav
+*.opus
+*.flac
+*.aac
+*.onnx
+*.bin
+!examples/**/*.mp3
+models/
+.ttskit-cache/
