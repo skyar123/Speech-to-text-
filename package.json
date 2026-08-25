@@ -1,0 +1,22 @@
+{
+  "name": "ttskit-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Netlify deployment of the ttskit OpenAI-compatible speech API",
+  "scripts": {
+    "dev": "netlify dev",
+    "deploy": "netlify deploy --build",
+    "typecheck": "tsc --noEmit",
+    "test:edge": "node --experimental-strip-types scripts/smoke-edge.mts"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^4.2.7",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.7.0"
+  }
+}

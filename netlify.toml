@@ -1,0 +1,26 @@
+# Netlify hosts the landing page, the playground, and an OpenAI-compatible
+# speech API implemented as serverless functions. The Python package in this
+# repo is unchanged — Netlify functions run Node, so `netlify/functions/_lib`
+# holds a TypeScript port of just the Edge client and subtitle writer.
+
+[build]
+  publish = "web"
+  command = "npm run typecheck"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[dev]
+  publish = "web"

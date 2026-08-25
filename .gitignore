@@ -28,3 +28,7 @@ output/
 !examples/**/*.mp3
 models/
 .ttskit-cache/
+
+# Node / Netlify
+node_modules/
+.netlify/

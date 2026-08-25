@@ -312,3 +312,48 @@ Apache-2.0 and runs entirely on your hardware.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+## Hosted on Netlify
+
+A live copy of the speech API runs at **https://ttskit-speech.netlify.app** —
+no key, no signup:
+
+```bash
+curl -s https://ttskit-speech.netlify.app/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{"model":"tts-1","input":"Hello from the edge.","voice":"nova"}' \
+  --output hello.mp3
+```
+
+Netlify functions run Node, not Python, so `netlify/functions/_lib/` holds a
+TypeScript port of two pieces only — the Edge WebSocket client and the subtitle
+writer. The Python package is untouched and remains the full implementation.
+
+| | Hosted (Netlify) | Local (`ttskit serve`) |
+|---|---|---|
+| Formats | `mp3` only — no ffmpeg in a function | mp3, opus, aac, flac, wav, pcm |
+| Input limit | 5,000 chars, ~10 s function timeout | unbounded |
+| Audiobooks, chapters, ID3 | — | yes |
+| Offline engine | — | yes (Kokoro-82M) |
+| Subtitles | yes, `POST /v1/audio/subtitles` | yes, `.srt` / `.vtt` / JSON files |
+| Transcription | — | yes (`ttskit transcribe`) |
+
+### Deploying your own
+
+```bash
+npm install
+npx netlify deploy --build      # or connect the repo in the Netlify UI
+```
+
+Two environment variables control the hosted endpoint:
+
+| Variable | Effect |
+|---|---|
+| `TTSKIT_API_KEY` | when set, requires `Authorization: Bearer <key>` |
+| `TTSKIT_MAX_INPUT_CHARS` | per-request character cap (default 5000) |
+
+**Set `TTSKIT_API_KEY` on any deploy you care about.** Without it the endpoint
+is open to anyone who finds the URL, and every request spends your function
+invocations and puts your deploy's IP in front of Microsoft's rate limiter.

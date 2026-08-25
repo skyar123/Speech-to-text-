@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ttskit — free neural text-to-speech, OpenAI-compatible</title>
+<meta name="description" content="A free OpenAI-compatible text-to-speech endpoint with ~320 neural voices, plus a local toolkit for audiobooks and subtitles. No API key, no billing." />
+<meta property="og:title" content="ttskit" />
+<meta property="og:description" content="Free OpenAI-compatible text-to-speech. ~320 neural voices, word-accurate subtitles, no API key." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔊</text></svg>" />
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg:#fbfaf9; --fg:#1a1a19; --muted:#6b6a67; --line:#e4e2de;
+    --card:#ffffff; --accent:#b5502a; --accent-fg:#ffffff; --code:#f3f1ee;
+    --ok:#2d7a4f; --err:#b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#141412; --fg:#eceae6; --muted:#9c9a94; --line:#2c2c29;
+            --card:#1d1d1b; --accent:#d97757; --accent-fg:#17170f; --code:#222220;
+            --ok:#7cc79b; --err:#f0857d; }
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+         -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  header { padding:72px 0 40px; }
+  .eyebrow { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--muted);
+             border:1px solid var(--line); border-radius:99px; padding:5px 12px; margin-bottom:22px; }
+  .dot { width:7px; height:7px; border-radius:99px; background:var(--ok); }
+  h1 { font-size:clamp(32px,6vw,46px); line-height:1.1; margin:0 0 16px; letter-spacing:-0.025em; }
+  h1 .accent { color:var(--accent); }
+  .lede { font-size:19px; color:var(--muted); margin:0 0 28px; max-width:60ch; }
+  .cta { display:flex; flex-wrap:wrap; gap:10px; }
+  .btn { display:inline-block; padding:10px 18px; border-radius:9px; text-decoration:none;
+         font-weight:600; font-size:15px; border:1px solid var(--line); color:var(--fg); }
+  .btn.primary { background:var(--accent); color:var(--accent-fg); border-color:transparent; }
+  h2 { font-size:15px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
+       margin:56px 0 16px; font-weight:600; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; }
+  textarea { width:100%; min-height:130px; resize:vertical; padding:13px; border:1px solid var(--line);
+             border-radius:9px; background:var(--bg); color:var(--fg); font:inherit; font-size:15px; }
+  .row { display:flex; flex-wrap:wrap; gap:12px; margin-top:14px; }
+  .field { display:flex; flex-direction:column; gap:6px; flex:1 1 140px; min-width:0; }
+  label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; font-weight:600; }
+  select, input[type=range] { padding:9px 10px; border:1px solid var(--line); border-radius:9px;
+          background:var(--bg); color:var(--fg); font:inherit; font-size:14px; min-width:0; }
+  input[type=range] { padding:0; }
+  button { margin-top:18px; padding:11px 22px; border:0; border-radius:9px; background:var(--accent);
+           color:var(--accent-fg); font:inherit; font-weight:600; font-size:15px; cursor:pointer; }
+  button:disabled { opacity:.55; cursor:progress; }
+  audio { width:100%; margin-top:16px; }
+  .status { margin-top:12px; font-size:14px; color:var(--muted); min-height:21px; }
+  .status.err { color:var(--err); }
+  .status.ok { color:var(--ok); }
+  pre { background:var(--code); border:1px solid var(--line); border-radius:11px; padding:16px;
+        overflow-x:auto; font-size:13.5px; line-height:1.55; margin:0 0 14px; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  p code, li code, td code { background:var(--code); border:1px solid var(--line); border-radius:5px;
+                             padding:1px 5px; font-size:.9em; }
+  table { width:100%; border-collapse:collapse; font-size:14.5px; margin-bottom:14px; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; }
+  .grid .card h3 { margin:0 0 6px; font-size:16px; }
+  .grid .card p { margin:0; font-size:14.5px; color:var(--muted); }
+  .note { border-left:3px solid var(--accent); padding:2px 0 2px 16px; color:var(--muted);
+          font-size:14.5px; margin:16px 0; }
+  a { color:var(--accent); }
+  footer { margin:72px 0 60px; padding-top:26px; border-top:1px solid var(--line);
+           color:var(--muted); font-size:14px; }
+  .scroller { overflow-x:auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <span class="eyebrow"><span class="dot"></span> Live endpoint · no API key required</span>
+    <h1>Free neural text-to-speech,<br /><span class="accent">on the OpenAI API shape</span>.</h1>
+    <p class="lede">
+      Point any OpenAI-compatible client at this domain and get ~320 neural voices back,
+      with no key and no billing. The same project runs locally as a CLI that turns Markdown
+      into chaptered audiobooks with word-accurate subtitles.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="#playground">Try it</a>
+      <a class="btn" href="https://github.com/skyar123/Speech-to-text-">Source on GitHub</a>
+      <a class="btn" href="#api">API reference</a>
+    </div>
+  </header>
+
+  <h2 id="playground">Playground</h2>
+  <div class="card">
+    <textarea id="text" placeholder="Type anything…">Everything I generate can now be read aloud, for free, from my own machine.</textarea>
+
+    <div class="row">
+      <div class="field">
+        <label for="voice">Voice</label>
+        <select id="voice"></select>
+      </div>
+      <div class="field">
+        <label for="speed">Speed <span id="speedLabel">1.00×</span></label>
+        <input id="speed" type="range" min="0.5" max="2" step="0.05" value="1" />
+      </div>
+      <div class="field">
+        <label for="mode">Output</label>
+        <select id="mode">
+          <option value="speech">Audio only</option>
+          <option value="subtitles">Audio + subtitles</option>
+        </select>
+      </div>
+    </div>
+
+    <button id="go">Speak</button>
+    <div class="status" id="status"></div>
+    <audio id="player" controls hidden></audio>
+    <pre id="captions" hidden></pre>
+  </div>
+
+  <h2 id="api">Use it from your own code</h2>
+  <pre><code>curl -s <span class="origin">https://example.netlify.app</span>/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{"model":"tts-1","input":"Hello from the edge.","voice":"nova"}' \
+  --output hello.mp3</code></pre>
+
+  <pre><code>from openai import OpenAI
+
+client = OpenAI(base_url="<span class="origin">https://example.netlify.app</span>/v1", api_key="anything")
+client.audio.speech.create(
+    model="tts-1", voice="onyx", input="Verified against the official SDK."
+).write_to_file("out.mp3")</code></pre>
+
+  <p>
+    All eleven OpenAI voice names work (<code>alloy</code>, <code>ash</code>, <code>ballad</code>,
+    <code>coral</code>, <code>echo</code>, <code>fable</code>, <code>nova</code>, <code>onyx</code>,
+    <code>sage</code>, <code>shimmer</code>, <code>verse</code>), so do short aliases like
+    <code>jenny</code> and <code>sonia</code>, and so does any native name such as
+    <code>en-AU-NatashaNeural</code> — unrecognised names pass straight through to the engine.
+  </p>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Endpoint</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>POST /v1/audio/speech</code></td><td>OpenAI-compatible. Returns <code>audio/mpeg</code>.</td></tr>
+        <tr><td><code>POST /v1/audio/subtitles</code></td><td>ttskit extension: base64 audio + <code>.srt</code> + <code>.vtt</code> + per-word marks.</td></tr>
+        <tr><td><code>GET /v1/voices</code></td><td>Full catalogue plus the alias table.</td></tr>
+        <tr><td><code>GET /v1/models</code></td><td>For clients that probe before calling.</td></tr>
+        <tr><td><code>GET /healthz</code></td><td>Engine, formats and limits.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <strong>What the hosted endpoint won't do.</strong> Serverless functions have no ffmpeg, so
+    this returns <code>mp3</code> only, and requests are capped at 5,000 characters with a
+    ~10&nbsp;second execution limit. Long-form work — audiobooks, chapters, ID3 tags,
+    opus/aac/flac, offline voices — is what the local CLI is for.
+  </div>
+
+  <h2>Run the full toolkit locally</h2>
+  <pre><code>git clone https://github.com/skyar123/Speech-to-text-.git
+cd Speech-to-text-
+pip install -e ".[server,ffmpeg]"
+
+ttskit book notes.md -o notes.mp3 --subs srt   # chaptered audiobook + captions
+ttskit serve                                    # this same API on :5050
+ttskit watch ~/claude-output --out ~/audio      # narrate files as they land</code></pre>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Audiobooks</h3>
+      <p>Markdown, PDF, HTML or a URL becomes one tagged MP3 or a chaptered M4B. Code fences and
+      link URLs are stripped; headings become chapters.</p>
+    </div>
+    <div class="card">
+      <h3>Real subtitles</h3>
+      <p>The engine reports the millisecond each word begins. Those marks are shifted onto the
+      stitched timeline, so captions stay in sync across a whole book.</p>
+    </div>
+    <div class="card">
+      <h3>Offline voices</h3>
+      <p>Kokoro-82M runs on CPU through ONNX Runtime. Nothing leaves the machine — useful when
+      the text shouldn't.</p>
+    </div>
+    <div class="card">
+      <h3>No ffmpeg needed</h3>
+      <p>MP3 stitching, paragraph silence and chapter offsets are pure Python. ffmpeg is only
+      for opus/aac/flac and M4B chapters.</p>
+    </div>
+  </div>
+
+  <footer>
+    MIT licensed · <a href="https://github.com/skyar123/Speech-to-text-">github.com/skyar123/Speech-to-text-</a><br />
+    Voices come from Microsoft Edge's read-aloud service. It's free and keyless, but it's a
+    consumer endpoint — be reasonable with volume, and run the offline engine when you need a
+    guarantee.
+  </footer>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const OPENAI_VOICES = ["alloy","ash","ballad","coral","echo","fable","nova","onyx","sage","shimmer","verse"];
+let objectUrl = null;
+
+for (const node of document.querySelectorAll(".origin")) node.textContent = location.origin;
+$("speed").addEventListener("input", () => {
+  $("speedLabel").textContent = (+$("speed").value).toFixed(2) + "×";
+});
+
+function setVoices(names) {
+  const select = $("voice");
+  select.innerHTML = "";
+  for (const name of names) {
+    const option = document.createElement("option");
+    option.value = option.textContent = name;
+    select.appendChild(option);
+  }
+  select.value = names.includes("nova") ? "nova" : names[0];
+}
+setVoices(OPENAI_VOICES);
+
+(async () => {
+  try {
+    const res = await fetch("/v1/voices");
+    if (!res.ok) return;
+    const data = await res.json();
+    const english = data.voices.filter((v) => (v.locale || "").startsWith("en")).map((v) => v.name);
+    setVoices([...OPENAI_VOICES, ...english]);
+  } catch { /* the aliases above always resolve, so this is only a nicety */ }
+})();
+
+$("go").addEventListener("click", async () => {
+  const text = $("text").value.trim();
+  if (!text) { $("status").className = "status err"; $("status").textContent = "Type something first."; return; }
+
+  const button = $("go");
+  const wantsSubs = $("mode").value === "subtitles";
+  button.disabled = true;
+  $("status").className = "status";
+  $("status").textContent = "Synthesizing…";
+  $("captions").hidden = true;
+  const started = performance.now();
+
+  try {
+    const body = {
+      model: "tts-1",
+      input: text,
+      voice: $("voice").value,
+      speed: parseFloat($("speed").value),
+    };
+    const res = await fetch(wantsSubs ? "/v1/audio/subtitles" : "/v1/audio/speech", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}));
+      throw new Error(detail?.error?.message || `${res.status} ${res.statusText}`);
+    }
+
+    let blob;
+    if (wantsSubs) {
+      const data = await res.json();
+      const bytes = Uint8Array.from(atob(data.audio_base64), (c) => c.charCodeAt(0));
+      blob = new Blob([bytes], { type: "audio/mpeg" });
+      $("captions").textContent = data.srt || "(no captions returned)";
+      $("captions").hidden = false;
+    } else {
+      blob = await res.blob();
+    }
+
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrl = URL.createObjectURL(blob);
+    const player = $("player");
+    player.src = objectUrl;
+    player.hidden = false;
+    player.play().catch(() => {});
+
+    const seconds = ((performance.now() - started) / 1000).toFixed(1);
+    $("status").className = "status ok";
+    $("status").textContent = `${(blob.size / 1024).toFixed(0)} KB in ${seconds}s · ${body.voice}`;
+  } catch (err) {
+    $("status").className = "status err";
+    $("status").textContent = String(err.message || err);
+  } finally {
+    button.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
