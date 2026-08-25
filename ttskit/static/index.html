@@ -35,6 +35,12 @@
            cursor:pointer; }
   button:disabled { opacity:.55; cursor:progress; }
   audio { width:100%; margin-top:18px; }
+  .downloads { display:flex; flex-wrap:wrap; gap:9px; margin-top:14px; }
+  .downloads a { display:inline-flex; align-items:center; gap:7px; padding:8px 14px;
+                 border:1px solid var(--line); border-radius:8px; background:var(--bg);
+                 color:var(--fg); text-decoration:none; font-size:14px; font-weight:600; }
+  .downloads a:hover { border-color:var(--accent); color:var(--accent); }
+  .downloads .size { font-weight:400; color:var(--muted); font-size:12.5px; }
   .status { margin-top:12px; font-size:13px; color:var(--muted); min-height:19px; }
   .status.err { color:#c0392b; }
   code { background:var(--card); border:1px solid var(--line); border-radius:5px;
@@ -80,6 +86,7 @@
     <button id="go">Speak</button>
     <div class="status" id="status"></div>
     <audio id="player" controls hidden></audio>
+    <div class="downloads" id="downloads" hidden></div>
   </div>
 
   <footer>
@@ -93,7 +100,42 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const OPENAI_VOICES = ["alloy","ash","ballad","coral","echo","fable","nova","onyx","sage","shimmer","verse"];
-let objectUrl = null;
+let objectUrls = [];
+
+/** Release the previous run's blob URLs before minting new ones. */
+function clearDownloads() {
+  for (const url of objectUrls) URL.revokeObjectURL(url);
+  objectUrls = [];
+  const box = $("downloads");
+  box.innerHTML = "";
+  box.hidden = true;
+}
+
+/** Turn the input into a short, safe filename stem. */
+function filenameStem(text) {
+  const slug = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 6)
+    .join("-")
+    .slice(0, 60);
+  return slug || "speech";
+}
+
+function addDownload(label, blob, filename) {
+  const url = URL.createObjectURL(blob);
+  objectUrls.push(url);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  const kb = blob.size < 1024 ? `${blob.size} B` : `${(blob.size / 1024).toFixed(0)} KB`;
+  link.innerHTML = `<span>&#8595; ${label}</span><span class="size">${kb}</span>`;
+  $("downloads").appendChild(link);
+  $("downloads").hidden = false;
+  return url;
+}
 
 $("host").textContent = location.host || "localhost:5050";
 $("speed").addEventListener("input", () => { $("speedLabel").textContent = (+$("speed").value).toFixed(2) + "×"; });
@@ -132,6 +174,7 @@ $("go").addEventListener("click", async () => {
   button.disabled = true;
   $("status").className = "status";
   $("status").textContent = "Synthesizing…";
+  clearDownloads();
   const started = performance.now();
 
   try {
@@ -154,10 +197,10 @@ $("go").addEventListener("click", async () => {
       throw new Error(detail?.error?.message || res.status + " " + res.statusText);
     }
     const blob = await res.blob();
-    if (objectUrl) URL.revokeObjectURL(objectUrl);
-    objectUrl = URL.createObjectURL(blob);
+    const format = $("format").value;
+    const url = addDownload(format.toUpperCase(), blob, `${filenameStem(text)}.${format}`);
     const player = $("player");
-    player.src = objectUrl;
+    player.src = url;
     player.hidden = false;
     player.play().catch(() => {});
     const seconds = ((performance.now() - started) / 1000).toFixed(1);

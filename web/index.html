@@ -53,6 +53,12 @@
            color:var(--accent-fg); font:inherit; font-weight:600; font-size:15px; cursor:pointer; }
   button:disabled { opacity:.55; cursor:progress; }
   audio { width:100%; margin-top:16px; }
+  .downloads { display:flex; flex-wrap:wrap; gap:9px; margin-top:14px; }
+  .downloads a { display:inline-flex; align-items:center; gap:7px; padding:8px 14px;
+                 border:1px solid var(--line); border-radius:9px; background:var(--bg);
+                 color:var(--fg); text-decoration:none; font-size:14px; font-weight:600; }
+  .downloads a:hover { border-color:var(--accent); color:var(--accent); }
+  .downloads .size { font-weight:400; color:var(--muted); font-size:12.5px; }
   .status { margin-top:12px; font-size:14px; color:var(--muted); min-height:21px; }
   .status.err { color:var(--err); }
   .status.ok { color:var(--ok); }
@@ -118,6 +124,7 @@
     <button id="go">Speak</button>
     <div class="status" id="status"></div>
     <audio id="player" controls hidden></audio>
+    <div class="downloads" id="downloads" hidden></div>
     <pre id="captions" hidden></pre>
   </div>
 
@@ -206,7 +213,42 @@ ttskit watch ~/claude-output --out ~/audio      # narrate files as they land</co
 <script>
 const $ = (id) => document.getElementById(id);
 const OPENAI_VOICES = ["alloy","ash","ballad","coral","echo","fable","nova","onyx","sage","shimmer","verse"];
-let objectUrl = null;
+let objectUrls = [];
+
+/** Release the previous run's blob URLs before minting new ones. */
+function clearDownloads() {
+  for (const url of objectUrls) URL.revokeObjectURL(url);
+  objectUrls = [];
+  const box = $("downloads");
+  box.innerHTML = "";
+  box.hidden = true;
+}
+
+/** Turn the input into a short, safe filename stem. */
+function filenameStem(text) {
+  const slug = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 6)
+    .join("-")
+    .slice(0, 60);
+  return slug || "speech";
+}
+
+function addDownload(label, blob, filename) {
+  const url = URL.createObjectURL(blob);
+  objectUrls.push(url);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  const kb = blob.size < 1024 ? `${blob.size} B` : `${(blob.size / 1024).toFixed(0)} KB`;
+  link.innerHTML = `<span>&#8595; ${label}</span><span class="size">${kb}</span>`;
+  $("downloads").appendChild(link);
+  $("downloads").hidden = false;
+  return url;
+}
 
 for (const node of document.querySelectorAll(".origin")) node.textContent = location.origin;
 $("speed").addEventListener("input", () => {
@@ -245,6 +287,7 @@ $("go").addEventListener("click", async () => {
   $("status").className = "status";
   $("status").textContent = "Synthesizing…";
   $("captions").hidden = true;
+  clearDownloads();
   const started = performance.now();
 
   try {
@@ -264,21 +307,35 @@ $("go").addEventListener("click", async () => {
       throw new Error(detail?.error?.message || `${res.status} ${res.statusText}`);
     }
 
+    const stem = filenameStem(text);
     let blob;
+    let captions = null;
+
     if (wantsSubs) {
       const data = await res.json();
       const bytes = Uint8Array.from(atob(data.audio_base64), (c) => c.charCodeAt(0));
       blob = new Blob([bytes], { type: "audio/mpeg" });
+      captions = data;
       $("captions").textContent = data.srt || "(no captions returned)";
       $("captions").hidden = false;
     } else {
       blob = await res.blob();
     }
 
-    if (objectUrl) URL.revokeObjectURL(objectUrl);
-    objectUrl = URL.createObjectURL(blob);
+    const audioUrl = addDownload("MP3", blob, `${stem}.mp3`);
+    if (captions?.srt) {
+      addDownload("SRT", new Blob([captions.srt], { type: "text/plain" }), `${stem}.srt`);
+    }
+    if (captions?.vtt) {
+      addDownload("VTT", new Blob([captions.vtt], { type: "text/vtt" }), `${stem}.vtt`);
+    }
+    if (captions?.marks?.length) {
+      const json = JSON.stringify(captions.marks, null, 2);
+      addDownload("Timings", new Blob([json], { type: "application/json" }), `${stem}.json`);
+    }
+
     const player = $("player");
-    player.src = objectUrl;
+    player.src = audioUrl;
     player.hidden = false;
     player.play().catch(() => {});
 
