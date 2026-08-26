@@ -334,7 +334,8 @@ writer. The Python package is untouched and remains the full implementation.
 | | Hosted (Netlify) | Local (`ttskit serve`) |
 |---|---|---|
 | Formats | `mp3` only — no ffmpeg in a function | mp3, opus, aac, flac, wav, pcm |
-| Input limit | 5,000 chars, ~10 s function timeout | unbounded |
+| Per-request input | 12,000 chars (6 MB response ceiling) | unbounded |
+| Document length | unbounded — the playground chunks and stitches | unbounded |
 | Audiobooks, chapters, ID3 | — | yes |
 | Offline engine | — | yes (Kokoro-82M) |
 | Subtitles | yes, `POST /v1/audio/subtitles` | yes, `.srt` / `.vtt` / JSON files |
@@ -352,7 +353,24 @@ Two environment variables control the hosted endpoint:
 | Variable | Effect |
 |---|---|
 | `TTSKIT_API_KEY` | when set, requires `Authorization: Bearer <key>` |
-| `TTSKIT_MAX_INPUT_CHARS` | per-request character cap (default 5000) |
+| `TTSKIT_MAX_INPUT_CHARS` | per-request character cap (default 12000) |
+
+### Long documents on the hosted endpoint
+
+A single call is capped because a serverless response cannot exceed 6 MB, not
+because long text is unsupported. The playground drops a whole document in and
+gets one file out: it strips Markdown, splits at sentence boundaries, runs four
+requests in parallel with a retry each, inserts 500 ms between paragraphs, and
+joins the MP3 frames in the browser. Word timings are shifted onto the stitched
+timeline, so the `.srt` covers the whole document.
+
+Measured on the live site: a 31,252-character document became 34m 48s of audio
+across 101 requests in 74 seconds. The 12 MB result decodes without a frame
+error and the last caption ends 0.9 s before the audio does — no accumulated
+drift.
+
+Calling the API directly, do the same thing: split the text, request the pieces,
+concatenate the MP3s. Frames from one encoder join cleanly with no re-encoding.
 
 **Set `TTSKIT_API_KEY` on any deploy you care about.** Without it the endpoint
 is open to anyone who finds the URL, and every request spends your function

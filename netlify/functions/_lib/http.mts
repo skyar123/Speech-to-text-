@@ -1,9 +1,16 @@
 /** Shared request handling: auth, OpenAI-shaped errors, input limits. */
 
-/** Hard ceiling on a single request, matching OpenAI's own 4096-char limit
- *  plus headroom. Also the main guard against someone running up your
- *  function minutes with a novel. */
-export const MAX_INPUT_CHARS = Number(Netlify.env.get("TTSKIT_MAX_INPUT_CHARS") ?? 5000);
+/**
+ * Ceiling on a *single* request. This is not a style choice — a serverless
+ * function has a wall-clock timeout and Netlify caps a synchronous response at
+ * 6 MB. Edge audio runs ~377 bytes per character, so 6 MB lands near 15,900
+ * characters; 12,000 keeps a comfortable margin on both limits.
+ *
+ * It is not a limit on document length. The playground splits long documents
+ * client-side and stitches the pieces, so nothing there is capped — and
+ * `ttskit book` has no limit at all.
+ */
+export const MAX_INPUT_CHARS = Number(Netlify.env.get("TTSKIT_MAX_INPUT_CHARS") ?? 12000);
 
 export const MODEL_IDS = ["tts-1", "tts-1-hd", "gpt-4o-mini-tts", "ttskit"];
 
@@ -44,8 +51,10 @@ export function checkLength(text: string): Response | null {
   if (text.length <= MAX_INPUT_CHARS) return null;
   return errorResponse(
     413,
-    `Input is ${text.length} characters; this hosted endpoint accepts ${MAX_INPUT_CHARS}. ` +
-      "Run ttskit locally (`ttskit book`) for long-form documents — it has no such limit.",
+    `Input is ${text.length} characters; a single request to this endpoint accepts ` +
+      `${MAX_INPUT_CHARS} (a serverless response is capped at 6 MB). Split the text and ` +
+      "concatenate the MP3s — they join cleanly — or use the playground, which does that " +
+      "for you, or `ttskit book` locally, which has no limit.",
     { param: "input", code: "input_too_long" },
   );
 }

@@ -41,29 +41,41 @@
   h2 { font-size:15px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
        margin:56px 0 16px; font-weight:600; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; }
-  textarea { width:100%; min-height:130px; resize:vertical; padding:13px; border:1px solid var(--line);
+  .card.drag { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent); }
+  textarea { width:100%; min-height:150px; resize:vertical; padding:13px; border:1px solid var(--line);
              border-radius:9px; background:var(--bg); color:var(--fg); font:inherit; font-size:15px; }
+  .toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:10px;
+             font-size:13px; color:var(--muted); }
+  .filebtn { display:inline-flex; align-items:center; gap:7px; padding:7px 13px; border:1px solid var(--line);
+             border-radius:8px; background:var(--bg); color:var(--fg); font-size:13.5px; font-weight:600;
+             cursor:pointer; }
+  .filebtn:hover { border-color:var(--accent); color:var(--accent); }
+  .toolbar .spacer { flex:1; }
   .row { display:flex; flex-wrap:wrap; gap:12px; margin-top:14px; }
   .field { display:flex; flex-direction:column; gap:6px; flex:1 1 140px; min-width:0; }
   label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; font-weight:600; }
   select, input[type=range] { padding:9px 10px; border:1px solid var(--line); border-radius:9px;
           background:var(--bg); color:var(--fg); font:inherit; font-size:14px; min-width:0; }
   input[type=range] { padding:0; }
-  button { margin-top:18px; padding:11px 22px; border:0; border-radius:9px; background:var(--accent);
+  button.go { margin-top:18px; padding:11px 22px; border:0; border-radius:9px; background:var(--accent);
            color:var(--accent-fg); font:inherit; font-weight:600; font-size:15px; cursor:pointer; }
-  button:disabled { opacity:.55; cursor:progress; }
+  button.go:disabled { opacity:.55; cursor:progress; }
   audio { width:100%; margin-top:16px; }
+  .status { margin-top:12px; font-size:14px; color:var(--muted); min-height:21px; }
+  .status.err { color:var(--err); }
+  .status.ok { color:var(--ok); }
+  .bar { margin-top:10px; height:6px; border-radius:99px; background:var(--code);
+         overflow:hidden; border:1px solid var(--line); }
+  .bar span { display:block; height:100%; width:0; background:var(--accent); transition:width .18s ease; }
   .downloads { display:flex; flex-wrap:wrap; gap:9px; margin-top:14px; }
   .downloads a { display:inline-flex; align-items:center; gap:7px; padding:8px 14px;
                  border:1px solid var(--line); border-radius:9px; background:var(--bg);
                  color:var(--fg); text-decoration:none; font-size:14px; font-weight:600; }
   .downloads a:hover { border-color:var(--accent); color:var(--accent); }
   .downloads .size { font-weight:400; color:var(--muted); font-size:12.5px; }
-  .status { margin-top:12px; font-size:14px; color:var(--muted); min-height:21px; }
-  .status.err { color:var(--err); }
-  .status.ok { color:var(--ok); }
   pre { background:var(--code); border:1px solid var(--line); border-radius:11px; padding:16px;
         overflow-x:auto; font-size:13.5px; line-height:1.55; margin:0 0 14px; }
+  pre.captions { max-height:260px; overflow-y:auto; margin-top:14px; }
   code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
   p code, li code, td code { background:var(--code); border:1px solid var(--line); border-radius:5px;
                              padding:1px 5px; font-size:.9em; }
@@ -89,8 +101,8 @@
     <h1>Free neural text-to-speech,<br /><span class="accent">on the OpenAI API shape</span>.</h1>
     <p class="lede">
       Point any OpenAI-compatible client at this domain and get ~320 neural voices back,
-      with no key and no billing. The same project runs locally as a CLI that turns Markdown
-      into chaptered audiobooks with word-accurate subtitles.
+      with no key and no billing. Drop a whole document into the playground and it comes
+      back as one narrated file, with captions.
     </p>
     <div class="cta">
       <a class="btn primary" href="#playground">Try it</a>
@@ -100,8 +112,16 @@
   </header>
 
   <h2 id="playground">Playground</h2>
-  <div class="card">
-    <textarea id="text" placeholder="Type anything…">Everything I generate can now be read aloud, for free, from my own machine.</textarea>
+  <div class="card" id="dropzone">
+    <textarea id="text" placeholder="Paste anything, or drop a .md / .txt file here…">Everything I generate can now be read aloud, for free, from my own machine.</textarea>
+
+    <div class="toolbar">
+      <label class="filebtn" for="file">&#8593; Load a file</label>
+      <input id="file" type="file" accept=".md,.markdown,.txt,.text,text/plain,text/markdown" hidden />
+      <span id="meta">73 characters · 1 request</span>
+      <span class="spacer"></span>
+      <span id="filename"></span>
+    </div>
 
     <div class="row">
       <div class="field">
@@ -121,11 +141,12 @@
       </div>
     </div>
 
-    <button id="go">Speak</button>
+    <button class="go" id="go">Speak</button>
+    <div class="bar" id="bar" hidden><span id="barFill"></span></div>
     <div class="status" id="status"></div>
     <audio id="player" controls hidden></audio>
     <div class="downloads" id="downloads" hidden></div>
-    <pre id="captions" hidden></pre>
+    <pre class="captions" id="captions" hidden></pre>
   </div>
 
   <h2 id="api">Use it from your own code</h2>
@@ -163,10 +184,19 @@ client.audio.speech.create(
   </div>
 
   <div class="note">
+    <strong>On length.</strong> A single API call is capped at 12,000 characters, because a
+    serverless response cannot exceed 6&nbsp;MB and Edge audio runs about 377 bytes per
+    character. That is not a limit on document length: the playground above splits long text
+    at sentence boundaries, synthesizes the pieces in parallel and joins them, so it will
+    narrate a book if you give it one. If you are calling the API yourself, do the same —
+    MP3 frames from one encoder concatenate cleanly. Locally, <code>ttskit book</code> has no
+    limit at all and also writes chapters and ID3 tags.
+  </div>
+
+  <div class="note">
     <strong>What the hosted endpoint won't do.</strong> Serverless functions have no ffmpeg, so
-    this returns <code>mp3</code> only, and requests are capped at 5,000 characters with a
-    ~10&nbsp;second execution limit. Long-form work — audiobooks, chapters, ID3 tags,
-    opus/aac/flac, offline voices — is what the local CLI is for.
+    this returns <code>mp3</code> only. Audiobook chapters, M4B, opus/aac/flac and the offline
+    voices are what the local CLI is for.
   </div>
 
   <h2>Run the full toolkit locally</h2>
@@ -213,27 +243,289 @@ ttskit watch ~/claude-output --out ~/audio      # narrate files as they land</co
 <script>
 const $ = (id) => document.getElementById(id);
 const OPENAI_VOICES = ["alloy","ash","ballad","coral","echo","fable","nova","onyx","sage","shimmer","verse"];
+
+/* Anything at or below this goes out as one request; above it the document is
+   split, synthesized in parallel and joined here in the browser. */
+const DIRECT_LIMIT = 1600;
+const CHUNK_CHARS = 1200;
+const CONCURRENCY = 4;
+const PARAGRAPH_GAP_MS = 500;
+const INTRA_GAP_MS = 120;
+/* Edge returns 24 kHz mono MP3 at 48 kbps — exactly 6000 bytes per second. */
+const BYTES_PER_SECOND = 6000;
+
 let objectUrls = [];
 
-/** Release the previous run's blob URLs before minting new ones. */
-function clearDownloads() {
-  for (const url of objectUrls) URL.revokeObjectURL(url);
-  objectUrls = [];
-  const box = $("downloads");
-  box.innerHTML = "";
-  box.hidden = true;
+for (const node of document.querySelectorAll(".origin")) node.textContent = location.origin;
+
+/* ---------------------------------------------------------------- text --- */
+
+/** Strip the Markdown a narrator should not read out loud. */
+function cleanMarkdown(input) {
+  return input
+    .replace(/\r\n?/g, "\n")
+    .replace(/^---\n[\s\S]*?\n---\n/, "")          // YAML front matter
+    .replace(/```[\s\S]*?```/g, "\n\n")            // fenced code
+    .replace(/~~~[\s\S]*?~~~/g, "\n\n")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/^\s*\|?[\s:|-]*-[\s:|-]*\|[\s:|-]*$/gm, "")  // table dividers
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")      // images -> alt text
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")       // links -> link text
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^\s*#{1,6}\s+/gm, "")                // heading marks, keep the words
+    .replace(/(\*\*\*|\*\*|\*|___|__|_)(\S[\s\S]*?\S)\1/g, "$2")
+    .replace(/~~(.+?)~~/g, "$1")
+    .replace(/^\s*([-*_])\s*\1\s*\1[\s*_-]*$/gm, "")  // horizontal rules
+    .replace(/^\s*>+\s?/gm, "")                    // block quotes
+    .replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, "")     // list markers
+    .replace(/<[^>\n]{1,200}>/g, "")               // stray HTML
+    .replace(/\|/g, ", ")                          // table cells
+    .replace(/^[ \t,]+|[ \t,]+$/gm, "")            // ...without the stray commas
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
-/** Turn the input into a short, safe filename stem. */
+/* Abbreviations a period never ends a sentence after. */
+const NEVER_END = /^(mr|mrs|ms|dr|prof|sr|jr|st|rev|vs|fig|no|vol|al|approx|jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec)$/i;
+/* Abbreviations that often do end one — split only if a new sentence follows. */
+const AMBIGUOUS = /^(etc|inc|ltd|co|corp|dept|e\.g|i\.e|a\.m|p\.m|u\.s|u\.k)$/i;
+
+const startsSentence = (rest) => /^[A-Z0-9“"'(]/.test(rest.replace(/^["'“‘([]+/, "")) ;
+
+function splitSentences(text) {
+  const out = [];
+  const pattern = /([.!?…]["'”’)\]]*)(\s+)/g;
+  let start = 0;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    const head = text.slice(start, match.index + match[1].length);
+    const lastWord = head.trim().split(/[\s(\[]/).pop().replace(/[.!?…"'’)\]]+$/, "");
+    if (NEVER_END.test(lastWord)) continue;
+    if (/^[A-Z]$/.test(lastWord)) continue;        // an initial, as in "J. R."
+    if (AMBIGUOUS.test(lastWord) && !startsSentence(text.slice(match.index + match[0].length))) continue;
+    out.push(head.trim());
+    start = match.index + match[0].length;
+  }
+  const tail = text.slice(start).trim();
+  if (tail) out.push(tail);
+  return out.length ? out : [text];
+}
+
+/** Break a sentence that is itself longer than the budget, at word boundaries. */
+function splitLong(piece, max) {
+  if (piece.length <= max) return [piece];
+  const out = [];
+  let rest = piece;
+  while (rest.length > max) {
+    const window = rest.slice(0, max);
+    let cut = Math.max(window.lastIndexOf("; "), window.lastIndexOf(", "), window.lastIndexOf(": "));
+    if (cut < max / 3) cut = window.lastIndexOf(" ");
+    cut = cut <= 0 ? max : cut + 1;
+    out.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+  if (rest) out.push(rest);
+  return out;
+}
+
+/** Split a document into request-sized chunks, remembering the pause after each. */
+function chunkDocument(input) {
+  const chunks = [];
+  for (const paragraph of cleanMarkdown(input).split(/\n\s*\n/)) {
+    const flat = paragraph.replace(/\n/g, " ").trim();
+    if (!flat) continue;
+
+    const pieces = [];
+    let current = "";
+    for (const sentence of splitSentences(flat)) {
+      for (const part of splitLong(sentence, CHUNK_CHARS)) {
+        if (!current) current = part;
+        else if (current.length + 1 + part.length <= CHUNK_CHARS) current += " " + part;
+        else { pieces.push(current); current = part; }
+      }
+    }
+    if (current) pieces.push(current);
+
+    pieces.forEach((text, i) => {
+      // Only the paragraph's last piece gets the full pause; splits inside a
+      // paragraph stay tight so the prose keeps flowing.
+      chunks.push({ text, gapAfterMs: i === pieces.length - 1 ? PARAGRAPH_GAP_MS : INTRA_GAP_MS });
+    });
+  }
+  if (chunks.length) chunks[chunks.length - 1].gapAfterMs = 0;
+  return chunks;
+}
+
+/* --------------------------------------------------------------- audio --- */
+
+/**
+ * Digital silence as raw MPEG Layer III frames matching Edge's output
+ * (24 kHz mono, 48 kbps, 144 bytes and 24 ms per frame). A frame whose side
+ * info is all zeros decodes as silence, so paragraph gaps need no encoder.
+ */
+function silentMp3(ms) {
+  const count = Math.max(0, Math.round(ms / 24));
+  const out = new Uint8Array(144 * count);
+  for (let i = 0; i < count; i++) {
+    out[i * 144] = 0xff;      // sync
+    out[i * 144 + 1] = 0xf3;  // MPEG2, Layer III, no CRC
+    out[i * 144 + 2] = 0x64;  // 48 kbps, 24 kHz
+    out[i * 144 + 3] = 0xc0;  // mono
+  }
+  return out;
+}
+
+const durationMs = (byteLength) => (byteLength / BYTES_PER_SECOND) * 1000;
+
+function formatDuration(ms) {
+  const total = Math.round(ms / 1000);
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return minutes ? `${minutes}m ${String(seconds).padStart(2, "0")}s` : `${seconds}s`;
+}
+
+/* ----------------------------------------------------------- subtitles --- */
+
+function timestamp(ms, comma) {
+  const total = Math.max(0, Math.round(ms));
+  const pad = (n, w = 2) => String(n).padStart(w, "0");
+  return `${pad(Math.floor(total / 3600000))}:${pad(Math.floor(total / 60000) % 60)}:` +
+         `${pad(Math.floor(total / 1000) % 60)}${comma ? "," : "."}${pad(total % 1000, 3)}`;
+}
+
+function joinWords(parts) {
+  let out = "";
+  for (const raw of parts) {
+    const token = raw.trim();
+    if (!token) continue;
+    if (!out) out = token;
+    else if (/^[,.!?;:%)\]}'"…]/.test(token)) out += token;
+    else if (/[([{“‘$]$/.test(out)) out += token;
+    else out += " " + token;
+  }
+  return out;
+}
+
+/** Group per-word marks into readable cues. Mirrors ttskit/subtitles.py. */
+function buildCues(marks, { maxChars = 42, maxMs = 6000, maxGapMs = 700 } = {}) {
+  const usable = marks.filter((m) => m.text && m.text.trim());
+  if (!usable.length) return [];
+
+  if (usable.every((m) => m.kind === "sentence")) {
+    let previousEnd = 0;
+    return usable.map((m, i) => {
+      const start = Math.max(m.start_ms, previousEnd);
+      const end = Math.max(start, m.end_ms);
+      previousEnd = end;
+      return { index: i + 1, startMs: start, endMs: end, text: m.text.trim() };
+    });
+  }
+
+  const cues = [];
+  let current = [];
+  const flush = () => {
+    if (!current.length) return;
+    cues.push({
+      index: cues.length + 1,
+      startMs: current[0].start_ms,
+      endMs: current[current.length - 1].end_ms,
+      text: joinWords(current.map((w) => w.text)),
+    });
+    current = [];
+  };
+
+  for (const mark of usable) {
+    if (current.length) {
+      const last = current[current.length - 1];
+      const projected = joinWords([...current.map((w) => w.text), mark.text]);
+      if (mark.start_ms - last.end_ms > maxGapMs ||
+          projected.length > maxChars ||
+          mark.end_ms - current[0].start_ms > maxMs) flush();
+      else if (/[.!?…]$/.test(last.text.trim())) flush();
+    }
+    current.push(mark);
+  }
+  flush();
+  return cues;
+}
+
+const cuesToSrt = (cues) => cues.length
+  ? cues.map((c) => `${c.index}\n${timestamp(c.startMs, true)} --> ${timestamp(c.endMs, true)}\n${c.text}`)
+        .join("\n\n") + "\n"
+  : "";
+
+const cuesToVtt = (cues) => ["WEBVTT", "", ...cues.flatMap((c) => [
+  String(c.index), `${timestamp(c.startMs, false)} --> ${timestamp(c.endMs, false)}`, c.text, "",
+])].join("\n");
+
+/* ------------------------------------------------------------ requests --- */
+
+async function requestChunk(text, { voice, speed, wantsSubs }) {
+  const endpoint = wantsSubs ? "/v1/audio/subtitles" : "/v1/audio/speech";
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "tts-1", input: text, voice, speed }),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(detail?.error?.message || `${res.status} ${res.statusText}`);
+  }
+  if (!wantsSubs) {
+    return { audio: new Uint8Array(await res.arrayBuffer()), marks: [] };
+  }
+  const data = await res.json();
+  return {
+    audio: Uint8Array.from(atob(data.audio_base64), (c) => c.charCodeAt(0)),
+    marks: data.marks || [],
+  };
+}
+
+/** One retry per chunk: with dozens of requests in flight, a single blip
+ *  would otherwise throw away the whole document. */
+async function requestChunkWithRetry(text, options) {
+  try {
+    return await requestChunk(text, options);
+  } catch (first) {
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    return requestChunk(text, options);
+  }
+}
+
+async function mapLimit(items, limit, worker, onProgress) {
+  const results = new Array(items.length);
+  let next = 0;
+  let finished = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (true) {
+        const index = next++;
+        if (index >= items.length) return;
+        results[index] = await worker(items[index], index);
+        onProgress(++finished, items.length);
+      }
+    }),
+  );
+  return results;
+}
+
+/* -------------------------------------------------------------- output --- */
+
+function clearOutputs() {
+  for (const url of objectUrls) URL.revokeObjectURL(url);
+  objectUrls = [];
+  $("downloads").innerHTML = "";
+  $("downloads").hidden = true;
+  $("captions").hidden = true;
+  $("bar").hidden = true;
+  $("barFill").style.width = "0%";
+}
+
 function filenameStem(text) {
-  const slug = text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .split(/\s+/)
-    .slice(0, 6)
-    .join("-")
-    .slice(0, 60);
+  const slug = text.toLowerCase().replace(/[^a-z0-9\s-]/g, "").trim()
+    .split(/\s+/).slice(0, 6).join("-").slice(0, 60);
   return slug || "speech";
 }
 
@@ -243,27 +535,27 @@ function addDownload(label, blob, filename) {
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
-  const kb = blob.size < 1024 ? `${blob.size} B` : `${(blob.size / 1024).toFixed(0)} KB`;
-  link.innerHTML = `<span>&#8595; ${label}</span><span class="size">${kb}</span>`;
+  const size = blob.size < 1024 ? `${blob.size} B`
+    : blob.size < 1048576 ? `${(blob.size / 1024).toFixed(0)} KB`
+    : `${(blob.size / 1048576).toFixed(1)} MB`;
+  link.innerHTML = `<span>&#8595; ${label}</span><span class="size">${size}</span>`;
   $("downloads").appendChild(link);
   $("downloads").hidden = false;
   return url;
 }
 
-for (const node of document.querySelectorAll(".origin")) node.textContent = location.origin;
-$("speed").addEventListener("input", () => {
-  $("speedLabel").textContent = (+$("speed").value).toFixed(2) + "×";
-});
+/* ----------------------------------------------------------------- ui  --- */
 
 function setVoices(names) {
   const select = $("voice");
+  const previous = select.value;
   select.innerHTML = "";
   for (const name of names) {
     const option = document.createElement("option");
     option.value = option.textContent = name;
     select.appendChild(option);
   }
-  select.value = names.includes("nova") ? "nova" : names[0];
+  select.value = names.includes(previous) ? previous : (names.includes("nova") ? "nova" : names[0]);
 }
 setVoices(OPENAI_VOICES);
 
@@ -277,61 +569,119 @@ setVoices(OPENAI_VOICES);
   } catch { /* the aliases above always resolve, so this is only a nicety */ }
 })();
 
+function refreshMeta() {
+  const text = $("text").value.trim();
+  if (!text) { $("meta").textContent = "empty"; return; }
+  const requests = text.length <= DIRECT_LIMIT ? 1 : chunkDocument(text).length;
+  const words = text.split(/\s+/).length;
+  // Narration lands near 150 words per minute at normal speed.
+  const estimate = formatDuration((words / 150) * 60000);
+  $("meta").textContent =
+    `${text.length.toLocaleString()} characters · ${words.toLocaleString()} words · ` +
+    `${requests} request${requests === 1 ? "" : "s"} · about ${estimate} of audio`;
+}
+$("text").addEventListener("input", refreshMeta);
+$("speed").addEventListener("input", () => {
+  $("speedLabel").textContent = (+$("speed").value).toFixed(2) + "×";
+});
+refreshMeta();
+
+async function loadFile(file) {
+  if (!file) return;
+  const text = await file.text();
+  $("text").value = text;
+  $("filename").textContent = file.name;
+  refreshMeta();
+}
+$("file").addEventListener("change", (e) => loadFile(e.target.files[0]));
+
+const dropzone = $("dropzone");
+for (const type of ["dragenter", "dragover"]) {
+  dropzone.addEventListener(type, (e) => { e.preventDefault(); dropzone.classList.add("drag"); });
+}
+for (const type of ["dragleave", "drop"]) {
+  dropzone.addEventListener(type, (e) => { e.preventDefault(); dropzone.classList.remove("drag"); });
+}
+dropzone.addEventListener("drop", (e) => loadFile(e.dataTransfer?.files?.[0]));
+
+/* --------------------------------------------------------------- speak --- */
+
 $("go").addEventListener("click", async () => {
   const text = $("text").value.trim();
-  if (!text) { $("status").className = "status err"; $("status").textContent = "Type something first."; return; }
+  if (!text) {
+    $("status").className = "status err";
+    $("status").textContent = "Type something, or drop a file in.";
+    return;
+  }
 
   const button = $("go");
   const wantsSubs = $("mode").value === "subtitles";
+  const voice = $("voice").value;
+  const speed = parseFloat($("speed").value);
+
   button.disabled = true;
+  clearOutputs();
   $("status").className = "status";
-  $("status").textContent = "Synthesizing…";
-  $("captions").hidden = true;
-  clearDownloads();
   const started = performance.now();
 
   try {
-    const body = {
-      model: "tts-1",
-      input: text,
-      voice: $("voice").value,
-      speed: parseFloat($("speed").value),
-    };
-    const res = await fetch(wantsSubs ? "/v1/audio/subtitles" : "/v1/audio/speech", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const detail = await res.json().catch(() => ({}));
-      throw new Error(detail?.error?.message || `${res.status} ${res.statusText}`);
-    }
+    const chunks = text.length <= DIRECT_LIMIT
+      ? [{ text, gapAfterMs: 0 }]
+      : chunkDocument(text);
 
-    const stem = filenameStem(text);
-    let blob;
-    let captions = null;
+    if (!chunks.length) throw new Error("Nothing speakable in that text.");
 
-    if (wantsSubs) {
-      const data = await res.json();
-      const bytes = Uint8Array.from(atob(data.audio_base64), (c) => c.charCodeAt(0));
-      blob = new Blob([bytes], { type: "audio/mpeg" });
-      captions = data;
-      $("captions").textContent = data.srt || "(no captions returned)";
-      $("captions").hidden = false;
+    let results;
+    if (chunks.length === 1) {
+      $("status").textContent = "Synthesizing…";
+      results = [await requestChunkWithRetry(chunks[0].text, { voice, speed, wantsSubs })];
     } else {
-      blob = await res.blob();
+      $("bar").hidden = false;
+      $("status").textContent = `Synthesizing 0 / ${chunks.length} chunks…`;
+      results = await mapLimit(
+        chunks, CONCURRENCY,
+        (chunk) => requestChunkWithRetry(chunk.text, { voice, speed, wantsSubs }),
+        (done, total) => {
+          $("barFill").style.width = `${(done / total) * 100}%`;
+          $("status").textContent = `Synthesizing ${done} / ${total} chunks…`;
+        },
+      );
     }
 
+    // Stitch in order, inserting each chunk's pause and shifting its marks
+    // onto the master timeline as we go.
+    const parts = [];
+    const marks = [];
+    let offsetMs = 0;
+    for (let i = 0; i < results.length; i++) {
+      const { audio, marks: chunkMarks } = results[i];
+      parts.push(audio);
+      for (const mark of chunkMarks) {
+        marks.push({ ...mark, start_ms: mark.start_ms + offsetMs, end_ms: mark.end_ms + offsetMs });
+      }
+      offsetMs += durationMs(audio.length);
+
+      const gap = chunks[i].gapAfterMs;
+      if (gap > 0) {
+        const silence = silentMp3(gap);
+        parts.push(silence);
+        offsetMs += durationMs(silence.length);
+      }
+    }
+
+    const blob = new Blob(parts, { type: "audio/mpeg" });
+    const stem = filenameStem(text);
     const audioUrl = addDownload("MP3", blob, `${stem}.mp3`);
-    if (captions?.srt) {
-      addDownload("SRT", new Blob([captions.srt], { type: "text/plain" }), `${stem}.srt`);
-    }
-    if (captions?.vtt) {
-      addDownload("VTT", new Blob([captions.vtt], { type: "text/vtt" }), `${stem}.vtt`);
-    }
-    if (captions?.marks?.length) {
-      const json = JSON.stringify(captions.marks, null, 2);
-      addDownload("Timings", new Blob([json], { type: "application/json" }), `${stem}.json`);
+
+    if (marks.length) {
+      const cues = buildCues(marks);
+      const srt = cuesToSrt(cues);
+      addDownload("SRT", new Blob([srt], { type: "text/plain" }), `${stem}.srt`);
+      addDownload("VTT", new Blob([cuesToVtt(cues)], { type: "text/vtt" }), `${stem}.vtt`);
+      addDownload("Timings", new Blob([JSON.stringify(marks, null, 2)], { type: "application/json" }),
+                  `${stem}.json`);
+      $("captions").textContent = srt || "(no captions returned)";
+      $("captions").hidden = false;
     }
 
     const player = $("player");
@@ -339,12 +689,16 @@ $("go").addEventListener("click", async () => {
     player.hidden = false;
     player.play().catch(() => {});
 
-    const seconds = ((performance.now() - started) / 1000).toFixed(1);
+    const elapsed = ((performance.now() - started) / 1000).toFixed(1);
     $("status").className = "status ok";
-    $("status").textContent = `${(blob.size / 1024).toFixed(0)} KB in ${seconds}s · ${body.voice}`;
+    $("status").textContent =
+      `${formatDuration(offsetMs)} of audio from ${chunks.length} ` +
+      `request${chunks.length === 1 ? "" : "s"} in ${elapsed}s · ${voice}`;
+    $("bar").hidden = true;
   } catch (err) {
     $("status").className = "status err";
     $("status").textContent = String(err.message || err);
+    $("bar").hidden = true;
   } finally {
     button.disabled = false;
   }

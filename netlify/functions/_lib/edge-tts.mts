@@ -59,6 +59,8 @@ export interface SynthesisOptions {
   timeoutMs?: number;
   /** Only used when running behind an HTTP proxy; unset in production. */
   agent?: unknown;
+  /** Fragments synthesized in parallel when the text needs splitting. */
+  concurrency?: number;
 }
 
 export interface EdgeVoice {
@@ -283,10 +285,35 @@ export function synthesizeFragment(
   });
 }
 
+/** Run `worker` over `items` with at most `limit` in flight, preserving order. */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const index = next++;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index], index);
+    }
+  });
+
+  await Promise.all(runners);
+  return results;
+}
+
 /**
  * Synthesize text of any length by splitting it and concatenating the results.
  * MP3 frames are self-delimiting and every fragment uses the same encoder
  * settings, so a plain buffer join produces a valid stream.
+ *
+ * Fragments are synthesized in parallel — the round trip to Microsoft dominates
+ * the wall clock, so this is what keeps a multi-fragment request inside the
+ * function timeout. Offsets are applied afterwards, in order.
  */
 export async function synthesize(
   text: string,
@@ -295,18 +322,22 @@ export async function synthesize(
   const fragments = splitText(text);
   if (fragments.length === 0) throw new Error("nothing to synthesize");
 
+  const concurrency = options.concurrency ?? 4;
+  const parts = await mapWithConcurrency(fragments, concurrency, (fragment) =>
+    synthesizeFragment(fragment, options),
+  );
+
   const audio: Buffer[] = [];
   const boundaries: Boundary[] = [];
   let offsetMs = 0;
 
-  for (const fragment of fragments) {
-    const result = await synthesizeFragment(fragment, options);
-    audio.push(result.audio);
-    for (const mark of result.boundaries) {
+  for (const part of parts) {
+    audio.push(part.audio);
+    for (const mark of part.boundaries) {
       boundaries.push({ ...mark, startMs: mark.startMs + offsetMs });
     }
     // 48 kbps constant bitrate: 6000 bytes per second of audio, exactly.
-    offsetMs += (result.audio.length / 6000) * 1000;
+    offsetMs += (part.audio.length / 6000) * 1000;
   }
 
   return { audio: Buffer.concat(audio), boundaries };
